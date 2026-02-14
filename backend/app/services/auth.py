@@ -7,11 +7,12 @@ from typing import Optional
 import secrets
 import hashlib
 import bcrypt
+import json
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models import User, Session
-from app.db.config import settings
+from app.db.config import settings, redis_conn
 
 
 class AuthService:
@@ -161,6 +162,25 @@ class AuthService:
         await db.commit()
         await db.refresh(session)
         
+        # 写入 Redis 缓存
+        try:
+            redis_client = await redis_conn.get_client()
+            session_data = {
+                "user_id": user_id,
+                "token": token,
+                "expires_at": expires_at.isoformat()
+            }
+            # 设置过期时间（秒）
+            expire_seconds = expire_minutes * 60
+            await redis_client.setex(
+                f"session:{token}",
+                expire_seconds,
+                json.dumps(session_data)
+            )
+        except Exception as e:
+            # Redis 写入失败不影响会话创建
+            print(f"Redis 缓存写入失败: {str(e)}")
+        
         return session
     
     @staticmethod
@@ -178,7 +198,32 @@ class AuthService:
         返回：
             验证成功返回用户对象，失败返回 None
         """
-        # 查询会话（禁用缓存以确保获取最新数据）
+        # 优先从 Redis 缓存读取
+        try:
+            redis_client = await redis_conn.get_client()
+            cached_session = await redis_client.get(f"session:{token}")
+            
+            if cached_session:
+                session_data = json.loads(cached_session)
+                expires_at = datetime.fromisoformat(session_data["expires_at"])
+                
+                # 检查是否过期
+                if expires_at >= datetime.utcnow():
+                    # 从缓存中获取用户信息
+                    user_id = session_data["user_id"]
+                    result = await db.execute(
+                        select(User).where(User.id == user_id).execution_options(no_cache=True)
+                    )
+                    user = result.scalar_one_or_none()
+                    return user
+                else:
+                    # 缓存已过期，删除
+                    await redis_client.delete(f"session:{token}")
+        except Exception as e:
+            # Redis 读取失败，继续从 MySQL 读取
+            print(f"Redis 缓存读取失败: {str(e)}")
+        
+        # 从 MySQL 查询会话（禁用缓存以确保获取最新数据）
         result = await db.execute(
             select(Session).where(Session.token == token).execution_options(no_cache=True)
         )
@@ -214,6 +259,15 @@ class AuthService:
         返回：
             删除成功返回 True，失败返回 False
         """
+        # 删除 Redis 缓存
+        try:
+            redis_client = await redis_conn.get_client()
+            await redis_client.delete(f"session:{token}")
+        except Exception as e:
+            # Redis 删除失败不影响会话删除
+            print(f"Redis 缓存删除失败: {str(e)}")
+        
+        # 从 MySQL 删除会话
         result = await db.execute(
             select(Session).where(Session.token == token)
         )
