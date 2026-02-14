@@ -46,25 +46,29 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_create_user(self, db: AsyncSession):
         """测试创建用户"""
+        import uuid
+        unique_username = f"testuser_{uuid.uuid4().hex[:8]}"
         user = await AuthService.create_user(
             db=db,
-            username="testuser",
+            username=unique_username,
             password="testpass",
             email="test@example.com"
         )
         
         assert user.id is not None
-        assert user.username == "testuser"
+        assert user.username == unique_username
         assert user.email == "test@example.com"
         assert user.password_hash != "testpass"
     
     @pytest.mark.asyncio
     async def test_create_duplicate_user(self, db: AsyncSession):
         """测试创建重复用户"""
+        import uuid
+        unique_username = f"duplicate_user_{uuid.uuid4().hex[:8]}"
         # 创建第一个用户
         await AuthService.create_user(
             db=db,
-            username="duplicate_user",
+            username=unique_username,
             password="testpass"
         )
         
@@ -72,28 +76,30 @@ class TestAuthService:
         with pytest.raises(ValueError, match="已存在"):
             await AuthService.create_user(
                 db=db,
-                username="duplicate_user",
+                username=unique_username,
                 password="testpass"
             )
     
     @pytest.mark.asyncio
     async def test_authenticate_user(self, db: AsyncSession):
         """测试用户认证"""
+        import uuid
+        unique_username = f"auth_user_{uuid.uuid4().hex[:8]}"
         # 创建用户
         await AuthService.create_user(
             db=db,
-            username="auth_user",
+            username=unique_username,
             password="correctpass"
         )
         
         # 正确密码
         user = await AuthService.authenticate_user(
             db=db,
-            username="auth_user",
+            username=unique_username,
             password="correctpass"
         )
         assert user is not None
-        assert user.username == "auth_user"
+        assert user.username == unique_username
         
         # 错误密码
         user = await AuthService.authenticate_user(
@@ -114,10 +120,12 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_create_session(self, db: AsyncSession):
         """测试创建会话"""
+        import uuid
+        unique_username = f"session_user_{uuid.uuid4().hex[:8]}"
         # 创建用户
         user = await AuthService.create_user(
             db=db,
-            username="session_user",
+            username=unique_username,
             password="testpass"
         )
         
@@ -132,10 +140,12 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_verify_session(self, db: AsyncSession):
         """测试验证会话"""
+        import uuid
+        unique_username = f"verify_user_{uuid.uuid4().hex[:8]}"
         # 创建用户和会话
         user = await AuthService.create_user(
             db=db,
-            username="verify_user",
+            username=unique_username,
             password="testpass"
         )
         session = await AuthService.create_session(db, user.id)
@@ -152,10 +162,12 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_delete_session(self, db: AsyncSession):
         """测试删除会话"""
+        import uuid
+        unique_username = f"delete_user_{uuid.uuid4().hex[:8]}"
         # 创建用户和会话
         user = await AuthService.create_user(
             db=db,
-            username="delete_user",
+            username=unique_username,
             password="testpass"
         )
         session = await AuthService.create_session(db, user.id)
@@ -255,10 +267,12 @@ class TestAuthAPI:
     @pytest.mark.asyncio
     async def test_register_duplicate_username(self, client: AsyncClient, db: AsyncSession):
         """测试注册重复用户名"""
+        import uuid
+        unique_username = f"duplicate_api_user_{uuid.uuid4().hex[:8]}"
         # 先创建一个用户
         await AuthService.create_user(
             db=db,
-            username="duplicate_api_user",
+            username=unique_username,
             password="testpass"
         )
         
@@ -266,7 +280,7 @@ class TestAuthAPI:
         response = await client.post(
             "/api/v1/auth/register",
             json={
-                "username": "duplicate_api_user",
+                "username": unique_username,
                 "password": "testpass",
                 "primary_categories": ["学习资料"]
             }
@@ -278,10 +292,12 @@ class TestAuthAPI:
     @pytest.mark.asyncio
     async def test_login(self, client: AsyncClient, db: AsyncSession):
         """测试登录 API"""
+        import uuid
+        unique_username = f"login_user_{uuid.uuid4().hex[:8]}"
         # 先创建用户
         await AuthService.create_user(
             db=db,
-            username="login_user",
+            username=unique_username,
             password="correctpass"
         )
         
@@ -289,7 +305,7 @@ class TestAuthAPI:
         response = await client.post(
             "/api/v1/auth/login",
             json={
-                "username": "login_user",
+                "username": unique_username,
                 "password": "correctpass"
             }
         )
@@ -299,15 +315,17 @@ class TestAuthAPI:
         assert "user_id" in data
         assert "username" in data
         assert "token" in data
-        assert data["username"] == "login_user"
+        assert data["username"] == unique_username
     
     @pytest.mark.asyncio
     async def test_login_wrong_password(self, client: AsyncClient, db: AsyncSession):
         """测试登录错误密码"""
+        import uuid
+        unique_username = f"wrongpass_user_{uuid.uuid4().hex[:8]}"
         # 先创建用户
         await AuthService.create_user(
             db=db,
-            username="wrongpass_user",
+            username=unique_username,
             password="correctpass"
         )
         
@@ -315,7 +333,7 @@ class TestAuthAPI:
         response = await client.post(
             "/api/v1/auth/login",
             json={
-                "username": "wrongpass_user",
+                "username": unique_username,
                 "password": "wrongpass"
             }
         )
@@ -326,10 +344,12 @@ class TestAuthAPI:
     @pytest.mark.asyncio
     async def test_logout(self, client: AsyncClient, db: AsyncSession):
         """测试注销 API"""
-        # 先创建用户并登录
+        # 先创建用户并登录（使用唯一用户名避免冲突）
+        import uuid
+        unique_username = f"logout_user_{uuid.uuid4().hex[:8]}"
         user = await AuthService.create_user(
             db=db,
-            username="logout_user",
+            username=unique_username,
             password="testpass"
         )
         session = await AuthService.create_session(db, user.id)
@@ -343,6 +363,9 @@ class TestAuthAPI:
         assert response.status_code == 200
         assert "注销成功" in response.json()["message"]
         
+        # 提交当前事务以清除会话缓存
+        await db.commit()
+        
         # 验证会话已删除
         verified_user = await AuthService.verify_session(db, session.token)
         assert verified_user is None
@@ -350,10 +373,12 @@ class TestAuthAPI:
     @pytest.mark.asyncio
     async def test_get_current_user_info(self, client: AsyncClient, db: AsyncSession):
         """测试获取当前用户信息 API"""
+        import uuid
+        unique_username = f"info_user_{uuid.uuid4().hex[:8]}"
         # 先创建用户并登录
         user = await AuthService.create_user(
             db=db,
-            username="info_user",
+            username=unique_username,
             password="testpass",
             email="info@example.com"
         )
@@ -368,7 +393,7 @@ class TestAuthAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["user_id"] == user.id
-        assert data["username"] == "info_user"
+        assert data["username"] == unique_username
         assert data["email"] == "info@example.com"
     
     @pytest.mark.asyncio

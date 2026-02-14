@@ -178,9 +178,9 @@ class AuthService:
         返回：
             验证成功返回用户对象，失败返回 None
         """
-        # 查询会话
+        # 查询会话（禁用缓存以确保获取最新数据）
         result = await db.execute(
-            select(Session).where(Session.token == token)
+            select(Session).where(Session.token == token).execution_options(no_cache=True)
         )
         session = result.scalar_one_or_none()
         
@@ -191,9 +191,9 @@ class AuthService:
         if session.expires_at < datetime.utcnow():
             return None
         
-        # 获取用户
+        # 获取用户（禁用缓存）
         result = await db.execute(
-            select(User).where(User.id == session.user_id)
+            select(User).where(User.id == session.user_id).execution_options(no_cache=True)
         )
         user = result.scalar_one_or_none()
         
@@ -224,6 +224,8 @@ class AuthService:
         
         await db.delete(session)
         await db.commit()
+        # 强制刷新会话缓存，确保删除操作立即生效
+        db.expire_all()
         
         return True
     
