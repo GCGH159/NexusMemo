@@ -238,13 +238,15 @@ class TestAuthAPI:
     @pytest.mark.asyncio
     async def test_register(self, client: AsyncClient):
         """测试注册 API"""
+        import uuid
+        unique_username = f"newuser_{uuid.uuid4().hex[:8]}"
         # 注意：这个测试需要配置 LLM API
         # 如果没有配置 API，会抛出异常
         try:
             response = await client.post(
                 "/api/v1/auth/register",
                 json={
-                    "username": "newuser",
+                    "username": unique_username,
                     "password": "testpass",
                     "email": "newuser@example.com",
                     "primary_categories": ["学习资料"]
@@ -257,7 +259,7 @@ class TestAuthAPI:
                 assert "user_id" in data
                 assert "username" in data
                 assert "token" in data
-                assert data["username"] == "newuser"
+                assert data["username"] == unique_username
             else:
                 # 如果 API 未配置，跳过测试
                 pytest.skip(f"注册失败，可能是 LLM API 未配置: {response.text}")
