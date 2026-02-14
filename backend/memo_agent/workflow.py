@@ -130,9 +130,12 @@ async def process_new_memo(user_id: int, memo_type: str, title: str, content: st
         event_links=[],
     )
     
-    final_state = None
+    # 合并所有节点的输出
+    merged_state = {}
     async for state in graph.astream(initial_state):
-        final_state = state
+        for node_name, node_output in state.items():
+            if node_output:
+                merged_state.update(node_output)
     
     # 3. 更新 MySQL 中的处理状态
     async with AsyncSessionLocal() as session:
@@ -143,8 +146,8 @@ async def process_new_memo(user_id: int, memo_type: str, title: str, content: st
     
     return {
         "memo_id": memo_id,
-        "classification": final_state.get("classification_result"),
-        "extraction": final_state.get("extraction_result"),
-        "relations": final_state.get("final_relations"),
-        "event_links": final_state.get("event_links"),
+        "classification": merged_state.get("classification_result", {}),
+        "extraction": merged_state.get("extraction_result", {}),
+        "relations": merged_state.get("final_relations", []),
+        "event_links": merged_state.get("event_links", []),
     }

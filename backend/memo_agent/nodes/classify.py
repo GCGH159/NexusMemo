@@ -4,6 +4,7 @@
 """
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 
 from memo_agent.state import MemoProcessState
 from memo_agent.schemas import ClassificationResult
@@ -39,7 +40,9 @@ async def classify_node(state: MemoProcessState) -> dict:
         base_url=settings.LLM_BASE_URL,
         temperature=0.1
     )
-    structured_llm = llm.with_structured_output(ClassificationResult)
+    
+    # 输出解析器
+    parser = PydanticOutputParser(pydantic_object=ClassificationResult)
     
     # 构建提示词
     prompt = ChatPromptTemplate.from_messages([
@@ -60,11 +63,8 @@ async def classify_node(state: MemoProcessState) -> dict:
 - meeting: 会议记录
 - other: 其他
 
-输出格式：
-- primary_category: 主分类名称
-- secondary_category: 次分类名称
-- confidence: 置信度（0-1）
-- reason: 分类理由"""),
+请严格按照以下 JSON 格式输出：
+{format_instructions}"""),
         ("human", """速记内容：
 标题：{title}
 内容：{content}
@@ -73,16 +73,26 @@ async def classify_node(state: MemoProcessState) -> dict:
 {categories}
 
 请为这条速记选择最合适的分类。如果现有分类都不合适，可以建议创建新分类。""")
-    ])
+    ]).partial(format_instructions=parser.get_format_instructions())
     
     # 执行分类
-    chain = prompt | structured_llm
-    result = await chain.ainvoke({
-        "title": title,
-        "content": content,
-        "categories": categories_str
-    })
-    
-    return {
-        "classification_result": result.model_dump()
-    }
+    chain = prompt | llm | parser
+    try:
+        result = await chain.ainvoke({
+            "title": title,
+            "content": content,
+            "categories": categories_str
+        })
+        return {
+            "classification_result": result.model_dump()
+        }
+    except Exception as e:
+        # 如果解析失败，返回默认分类
+        return {
+            "classification_result": {
+                "primary_category": "other",
+                "secondary_category": "general",
+                "confidence": 0.5,
+                "reason": f"分类失败: {str(e)}"
+            }
+        }

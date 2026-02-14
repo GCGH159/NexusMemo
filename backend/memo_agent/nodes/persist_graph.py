@@ -17,14 +17,16 @@ async def persist_graph_node(state: MemoProcessState) -> dict:
     title = state["title"]
     content = state["content"]
     
-    classification = state["classification_result"]
-    extraction = state["extraction_result"]
-    relations = state["final_relations"]
-    event_links = state["event_links"]
+    classification = state["classification_result"] or {}
+    extraction = state["extraction_result"] or {}
+    relations = state["final_relations"] or []
+    event_links = state["event_links"] or []
     
-    async with neo4j_conn.get_session() as session:
+    session = await neo4j_conn.get_session()
+    try:
         # 使用事务批量执行
-        async with session.begin_transaction() as tx:
+        tx = await session.begin_transaction()
+        try:
             # 1. 创建 Memo/Event 节点
             if memo_type == "event":
                 event_type = extraction.get("event_type", "general")
@@ -106,6 +108,7 @@ async def persist_graph_node(state: MemoProcessState) -> dict:
                             reason: $reason,
                             created_at: datetime()
                         }, t) YIELD rel
+                        RETURN rel
                     """, uid=user_id, src_id=memo_id, tgt_id=target_id,
                         rel_type=rel_type, score=score, reason=reason)
             
@@ -130,5 +133,9 @@ async def persist_graph_node(state: MemoProcessState) -> dict:
                             strength=binding_strength, reason=reason)
             
             await tx.commit()
+        finally:
+            await tx.close()
+    finally:
+        await session.close()
     
     return {}

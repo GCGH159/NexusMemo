@@ -5,6 +5,7 @@
 import json
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 
 from memo_agent.state import MemoProcessState
 from memo_agent.schemas import RelationBatchResult
@@ -24,7 +25,9 @@ async def judge_relations_node(state: MemoProcessState) -> dict:
         base_url=settings.LLM_BASE_URL,
         temperature=0
     )
-    structured_llm = llm.with_structured_output(RelationBatchResult)
+    
+    # 输出解析器
+    parser = PydanticOutputParser(pydantic_object=RelationBatchResult)
     
     content = state["content"]
     candidates_json = json.dumps(state["relation_candidates"], ensure_ascii=False, indent=2)
@@ -51,7 +54,10 @@ async def judge_relations_node(state: MemoProcessState) -> dict:
 规则：
 1. 只建立评分 > 0.5 的关联
 2. 关联理由要清晰具体
-3. 如果有多个候选都相关，按评分排序保留前 5 个"""),
+3. 如果有多个候选都相关，按评分排序保留前 5 个
+
+请严格按照以下 JSON 格式输出：
+{format_instructions}"""),
         ("human", """新速记内容：
 {content}
 
@@ -59,19 +65,26 @@ async def judge_relations_node(state: MemoProcessState) -> dict:
 {candidates}
 
 请判断每个候选是否应该关联，并给出详细的关系类型、评分和理由。""")
-    ])
+    ]).partial(format_instructions=parser.get_format_instructions())
 
-    chain = prompt | structured_llm
-    result = await chain.ainvoke({
-        "content": content,
-        "candidates": candidates_json,
-    })
-    
-    # 过滤掉 should_link=False 的结果
-    final_relations = [
-        j.model_dump() for j in result.judgments if j.should_link
-    ]
-    
-    return {
-        "final_relations": final_relations,
-    }
+    chain = prompt | llm | parser
+    try:
+        result = await chain.ainvoke({
+            "content": content,
+            "candidates": candidates_json,
+        })
+        
+        # 过滤掉 should_link=False 的结果
+        judgments = result.judgments or []
+        final_relations = [
+            j.model_dump() for j in judgments if j.should_link
+        ]
+        
+        return {
+            "final_relations": final_relations,
+        }
+    except Exception as e:
+        # 如果解析失败，返回空关联列表
+        return {
+            "final_relations": [],
+        }

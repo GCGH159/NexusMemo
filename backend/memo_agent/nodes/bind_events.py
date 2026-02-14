@@ -5,6 +5,7 @@
 import json
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 
 from memo_agent.state import MemoProcessState
 from memo_agent.schemas import EventBindingBatchResult
@@ -28,7 +29,9 @@ async def bind_events_node(state: MemoProcessState) -> dict:
         base_url=settings.LLM_BASE_URL,
         temperature=0
     )
-    structured_llm = llm.with_structured_output(EventBindingBatchResult)
+    
+    # 输出解析器
+    parser = PydanticOutputParser(pydantic_object=EventBindingBatchResult)
     
     events_json = json.dumps(active_events, ensure_ascii=False, indent=2)
     
@@ -47,7 +50,10 @@ async def bind_events_node(state: MemoProcessState) -> dict:
 
 输出：
 - decisions: 对每个活跃事件的绑定决策
-- auto_detected_events: 如果内容中提及了用户尚未创建的事件，列出建议"""),
+- auto_detected_events: 如果内容中提及了用户尚未创建的事件，列出建议
+
+请严格按照以下 JSON 格式输出：
+{format_instructions}"""),
         ("human", """新速记内容：
 {content}
 
@@ -55,19 +61,26 @@ async def bind_events_node(state: MemoProcessState) -> dict:
 {events}
 
 请判断该速记应该绑定到哪些事件，以及是否检测到潜在的新事件。""")
-    ])
+    ]).partial(format_instructions=parser.get_format_instructions())
 
-    chain = prompt | structured_llm
-    result = await chain.ainvoke({
-        "content": state["content"],
-        "events": events_json,
-    })
-    
-    # 只保留 should_bind=True 的绑定
-    final_links = [
-        d.model_dump() for d in result.decisions if d.should_bind
-    ]
-    
-    return {
-        "event_links": final_links,
-    }
+    chain = prompt | llm | parser
+    try:
+        result = await chain.ainvoke({
+            "content": state["content"],
+            "events": events_json,
+        })
+        
+        # 只保留 should_bind=True 的绑定
+        decisions = result.decisions or []
+        final_links = [
+            d.model_dump() for d in decisions if d.should_bind
+        ]
+        
+        return {
+            "event_links": final_links,
+        }
+    except Exception as e:
+        # 如果解析失败，返回空事件链接列表
+        return {
+            "event_links": [],
+        }

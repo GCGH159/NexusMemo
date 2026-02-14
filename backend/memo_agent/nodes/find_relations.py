@@ -31,22 +31,22 @@ async def find_relations_quicknote(state: MemoProcessState) -> dict:
     """
     user_id = state["user_id"]
     memo_id = state["memo_id"]
-    extraction = state["extraction_result"]
+    extraction = state["extraction_result"] or {}
     
-    tags = [tag["name"] for tag in extraction.get("tags", [])]
-    entities = [entity["name"] for entity in extraction.get("entities", [])]
-    classification = state["classification_result"]
+    tags = [tag["name"] for tag in (extraction.get("tags") or [])]
+    entities = [entity["name"] for entity in (extraction.get("entities") or [])]
+    classification = state["classification_result"] or {}
     
     candidates = []
     
-    async with neo4j_conn.get_session() as session:
+    session = await neo4j_conn.get_session()
+    try:
         # 1. 基于标签查找
         if tags:
             tag_result = await session.run("""
-                MATCH (u:User {user_id: $uid})-[:OWNS]->(m:Memo)
+                MATCH (u:User {user_id: $uid})-[:OWNS]->(m:Memo)-[:HAS_TAG]->(t:Tag)
                 WHERE m.memo_id <> $mid
-                AND (m)-[:HAS_TAG]->(t:Tag)
-                WHERE t.name IN $tags
+                AND t.name IN $tags
                 WITH m, collect(t.name) AS matched_tags
                 RETURN m.memo_id AS id, m.title AS title,
                        left(m.content, 200) AS content_preview,
@@ -68,10 +68,9 @@ async def find_relations_quicknote(state: MemoProcessState) -> dict:
         # 2. 基于实体查找
         if entities:
             entity_result = await session.run("""
-                MATCH (u:User {user_id: $uid})-[:OWNS]->(m:Memo)
+                MATCH (u:User {user_id: $uid})-[:OWNS]->(m:Memo)-[:MENTIONS]->(en:Entity)
                 WHERE m.memo_id <> $mid
-                AND (m)-[:MENTIONS]->(en:Entity)
-                WHERE en.name IN $entities
+                AND en.name IN $entities
                 WITH m, collect(en.name) AS matched_entities
                 RETURN m.memo_id AS id, m.title AS title,
                        left(m.content, 200) AS content_preview,
@@ -106,7 +105,7 @@ async def find_relations_quicknote(state: MemoProcessState) -> dict:
                        'memo' AS type,
                        '分类匹配' AS match_reason
                 LIMIT 10
-            """, uid=user_id, mid=memo_id, primary=primary_cat, secondary=secondary_cat)
+            """, uid=user_id, mid=memo_id, primary=primary_cat, secondary=secondary_cat or "")
             
             async for record in cat_result:
                 # 避免重复
@@ -142,6 +141,8 @@ async def find_relations_quicknote(state: MemoProcessState) -> dict:
                     "type": record["type"],
                     "match_reason": record["match_reason"]
                 })
+    finally:
+        await session.close()
     
     return {"relation_candidates": candidates}
 
@@ -162,7 +163,8 @@ async def vector_search_memos(query: str, user_id: int, top_k: int = 15) -> str:
     """
     # 注意：实际使用时需要配置embedding模型
     # 这里简化实现，使用全文搜索代替向量搜索
-    async with neo4j_conn.get_session() as session:
+    session = await neo4j_conn.get_session()
+    try:
         result = await session.run("""
             CALL db.index.fulltext.queryNodes('memo_fulltext', $query)
             YIELD node, score
@@ -178,6 +180,8 @@ async def vector_search_memos(query: str, user_id: int, top_k: int = 15) -> str:
         async for record in result:
             items.append(dict(record))
         return json.dumps(items, ensure_ascii=False)
+    finally:
+        await session.close()
 
 
 @tool
@@ -191,7 +195,8 @@ async def search_by_entity_graph(entity_name: str, user_id: int, hops: int = 2) 
         user_id: 用户 ID
         hops: 最大跳数（1-3）
     """
-    async with neo4j_conn.get_session() as session:
+    session = await neo4j_conn.get_session()
+    try:
         result = await session.run("""
             MATCH (en:Entity)
             WHERE en.name CONTAINS $name
@@ -220,6 +225,8 @@ async def search_by_entity_graph(entity_name: str, user_id: int, hops: int = 2) 
         async for record in result:
             items.append(dict(record))
         return json.dumps(items, ensure_ascii=False)
+    finally:
+        await session.close()
 
 
 @tool
@@ -230,8 +237,9 @@ async def search_by_tags(tag_names: list[str], user_id: int) -> str:
     参数：
         tag_names: 标签名称列表
         user_id: 用户 ID
-    """ 
-    async with neo4j_conn.get_session() as session:
+    """
+    session = await neo4j_conn.get_session()
+    try:
         result = await session.run("""
             MATCH (u:User {user_id: $uid})-[:OWNS]->(m)-[:HAS_TAG]->(t:Tag)
             WHERE t.name IN $tags
@@ -248,6 +256,8 @@ async def search_by_tags(tag_names: list[str], user_id: int) -> str:
         async for record in result:
             items.append(dict(record))
         return json.dumps(items, ensure_ascii=False)
+    finally:
+        await session.close()
 
 
 @tool  
@@ -260,7 +270,8 @@ async def search_by_time_range(start_date: str, end_date: str, user_id: int) -> 
         end_date: 结束日期
         user_id: 用户 ID
     """
-    async with neo4j_conn.get_session() as session:
+    session = await neo4j_conn.get_session()
+    try:
         result = await session.run("""
             MATCH (u:User {user_id: $uid})-[:OWNS]->(x)
             WHERE x.created_at >= date($start) AND x.created_at <= date($end)
@@ -277,6 +288,8 @@ async def search_by_time_range(start_date: str, end_date: str, user_id: int) -> 
         async for record in result:
             items.append(dict(record))
         return json.dumps(items, ensure_ascii=False)
+    finally:
+        await session.close()
 
 
 # ============================================================

@@ -18,7 +18,14 @@ async def load_user_graph_context(state: MemoProcessState) -> dict:
     """
     user_id = state["user_id"]
     
-    async with neo4j_conn.get_session() as session:
+    # 初始化变量
+    categories = []
+    tags = []
+    active_events = []
+    recent_memos = []
+    
+    session = await neo4j_conn.get_session()
+    try:
             # 1. 查询用户的分类体系
             categories_result = await session.run("""
                 MATCH (u:User {user_id: $uid})-[:OWNS]->(m)-[:BELONGS_TO]->(c:Category)
@@ -29,13 +36,13 @@ async def load_user_graph_context(state: MemoProcessState) -> dict:
                 LIMIT 20
             """, uid=user_id)
             
-            categories = []
-            async for record in categories_result:
-                categories.append({
-                    "name": record["name"],
-                    "type": record["type"],
-                    "memo_count": record["memo_count"]
-                })
+            if categories_result:
+                async for record in categories_result:
+                    categories.append({
+                        "name": record["name"],
+                        "type": record["type"],
+                        "memo_count": record["memo_count"]
+                    })
             
             # 2. 查询用户常用的标签
             tags_result = await session.run("""
@@ -47,12 +54,12 @@ async def load_user_graph_context(state: MemoProcessState) -> dict:
                 LIMIT 30
             """, uid=user_id)
             
-            tags = []
-            async for record in tags_result:
-                tags.append({
-                    "name": record["name"],
-                    "memo_count": record["memo_count"]
-                })
+            if tags_result:
+                async for record in tags_result:
+                    tags.append({
+                        "name": record["name"],
+                        "memo_count": record["memo_count"]
+                    })
             
             # 3. 查询用户当前活跃的事件
             events_result = await session.run("""
@@ -65,15 +72,15 @@ async def load_user_graph_context(state: MemoProcessState) -> dict:
                 LIMIT 10
             """, uid=user_id)
             
-            active_events = []
-            async for record in events_result:
-                active_events.append({
-                    "event_id": record["event_id"],
-                    "title": record["title"],
-                    "description": record["description"],
-                    "event_type": record["event_type"],
-                    "created_at": record["created_at"].isoformat() if record["created_at"] else None
-                })
+            if events_result:
+                async for record in events_result:
+                    active_events.append({
+                        "event_id": record["event_id"],
+                        "title": record["title"],
+                        "description": record["description"],
+                        "event_type": record["event_type"],
+                        "created_at": record["created_at"].isoformat() if record["created_at"] else None
+                    })
             
             # 4. 查询用户最近创建的速记（用于关联参考）
             recent_memos_result = await session.run("""
@@ -85,14 +92,16 @@ async def load_user_graph_context(state: MemoProcessState) -> dict:
                 LIMIT 20
             """, uid=user_id)
             
-            recent_memos = []
-            async for record in recent_memos_result:
-                recent_memos.append({
-                    "memo_id": record["memo_id"],
-                    "title": record["title"],
-                    "content_preview": record["content_preview"],
-                    "created_at": record["created_at"].isoformat() if record["created_at"] else None
-                })
+            if recent_memos_result:
+                async for record in recent_memos_result:
+                    recent_memos.append({
+                        "memo_id": record["memo_id"],
+                        "title": record["title"],
+                        "content_preview": record["content_preview"],
+                        "created_at": record["created_at"].isoformat() if record["created_at"] else None
+                    })
+    finally:
+        await session.close()
     
     # 构建用户图谱上下文
     user_graph_context = {

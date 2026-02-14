@@ -4,6 +4,7 @@
 """
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 
 from memo_agent.state import MemoProcessState
 from memo_agent.schemas import ExtractionResult
@@ -40,7 +41,9 @@ async def extract_tags_entities_node(state: MemoProcessState) -> dict:
         base_url=settings.LLM_BASE_URL,
         temperature=0.2
     )
-    structured_llm = llm.with_structured_output(ExtractionResult)
+    
+    # 输出解析器
+    parser = PydanticOutputParser(pydantic_object=ExtractionResult)
     
     # 构建提示词
     prompt = ChatPromptTemplate.from_messages([
@@ -58,10 +61,8 @@ async def extract_tags_entities_node(state: MemoProcessState) -> dict:
 - concept: 概念/术语
 - location: 地点
 
-输出格式：
-- tags: 标签列表（每个标签包含name和confidence）
-- entities: 实体列表（每个实体包含name、entity_type和confidence）
-- summary: 内容摘要"""),
+请严格按照以下 JSON 格式输出：
+{format_instructions}"""),
         ("human", """速记内容：
 标题：{title}
 内容：{content}
@@ -70,16 +71,25 @@ async def extract_tags_entities_node(state: MemoProcessState) -> dict:
 {tags}
 
 请提取标签和实体，并生成摘要。""")
-    ])
+    ]).partial(format_instructions=parser.get_format_instructions())
     
     # 执行提取
-    chain = prompt | structured_llm
-    result = await chain.ainvoke({
-        "title": title,
-        "content": content,
-        "tags": tags_str
-    })
-    
-    return {
-        "extraction_result": result.model_dump()
-    }
+    chain = prompt | llm | parser
+    try:
+        result = await chain.ainvoke({
+            "title": title,
+            "content": content,
+            "tags": tags_str
+        })
+        return {
+            "extraction_result": result.model_dump()
+        }
+    except Exception as e:
+        # 如果解析失败，返回默认提取结果
+        return {
+            "extraction_result": {
+                "tags": [],
+                "entities": [],
+                "summary": f"提取失败: {str(e)}"
+            }
+        }
