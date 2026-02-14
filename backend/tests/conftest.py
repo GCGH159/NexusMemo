@@ -3,8 +3,9 @@ Pytest 配置文件
 定义全局 fixtures 和测试配置
 """
 import pytest
+import pytest_asyncio
 import asyncio
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from app.main import app
 
 
@@ -16,14 +17,31 @@ def event_loop():
     loop.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def client():
     """创建测试客户端"""
-    async with AsyncClient(app=app, base_url="http://test") as ac:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture
+async def db():
+    """创建数据库会话"""
+    from app.db.config import AsyncSessionLocal
+    
+    session = AsyncSessionLocal()
+    try:
+        yield session
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
+    finally:
+        await session.close()
+
+
+@pytest_asyncio.fixture(scope="session")
 async def setup_database():
     """设置测试数据库"""
     from app.db.config import AsyncSessionLocal

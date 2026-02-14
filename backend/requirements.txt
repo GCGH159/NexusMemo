@@ -28,6 +28,8 @@ celery[redis]==5.4.0
 # Data Validation
 pydantic==2.10.5
 pydantic-settings==2.7.1
+pydantic[email]==2.10.5
+email-validator==2.2.0
 
 # Audio Processing
 faster-whisper==1.1.1
