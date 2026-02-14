@@ -163,3 +163,80 @@ async def list_memos(
         ],
         "total": total,
     }
+
+
+class UpdateMemoRequest(BaseModel):
+    """更新速记请求"""
+    title: str = Field(None, description="标题")
+    content: str = Field(None, description="内容")
+    status: str = Field(None, description="状态（active | archived | deleted）")
+
+
+class UpdateMemoResponse(BaseModel):
+    """更新速记响应"""
+    memo_id: int
+    message: str
+
+
+@router.put("/{memo_id}", response_model=UpdateMemoResponse)
+async def update_memo(
+    memo_id: int,
+    request: UpdateMemoRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    更新速记信息
+    """
+    from app.models import Memo, MemoStatus
+    
+    memo = await db.get(Memo, memo_id)
+    if not memo:
+        raise HTTPException(status_code=404, detail="速记不存在")
+    
+    # 更新字段
+    if request.title is not None:
+        memo.title = request.title
+    if request.content is not None:
+        memo.content = request.content
+    if request.status is not None:
+        try:
+            memo.status = MemoStatus(request.status)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="无效的状态值")
+    
+    await db.commit()
+    
+    return {
+        "memo_id": memo.id,
+        "message": "更新成功",
+    }
+
+
+class DeleteMemoResponse(BaseModel):
+    """删除速记响应"""
+    memo_id: int
+    message: str
+
+
+@router.delete("/{memo_id}", response_model=DeleteMemoResponse)
+async def delete_memo(
+    memo_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    删除速记（软删除，将状态设为 deleted）
+    """
+    from app.models import Memo, MemoStatus
+    
+    memo = await db.get(Memo, memo_id)
+    if not memo:
+        raise HTTPException(status_code=404, detail="速记不存在")
+    
+    # 软删除
+    memo.status = MemoStatus.DELETED
+    await db.commit()
+    
+    return {
+        "memo_id": memo.id,
+        "message": "删除成功",
+    }

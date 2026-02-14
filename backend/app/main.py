@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.db.config import settings, neo4j_conn, redis_conn
-from app.api.v1 import memos, auth
+from app.api.v1 import memos, auth, preferences
 
 
 @asynccontextmanager
@@ -48,6 +48,7 @@ app.add_middleware(
 # 注册路由
 app.include_router(memos.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(preferences.router, prefix="/api/v1")
 
 
 @app.get("/")
