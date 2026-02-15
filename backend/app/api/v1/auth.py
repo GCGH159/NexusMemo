@@ -54,6 +54,8 @@ class LogoutResponse(BaseModel):
 
 class GetPrimaryCategoriesResponse(BaseModel):
     """获取一级分类响应"""
+    code: int = Field(200, description="响应码")
+    message: str = Field("获取一级分类成功", description="响应消息")
     categories: List[str] = Field(..., description="一级分类列表")
 
 
@@ -64,6 +66,8 @@ class GenerateSubCategoriesRequest(BaseModel):
 
 class GenerateSubCategoriesResponse(BaseModel):
     """生成二级分类响应"""
+    code: int = Field(200, description="响应码")
+    message: str = Field("生成二级分类成功", description="响应消息")
     categories: List[str] = Field(..., description="二级分类列表")
     descriptions: dict = Field(..., description="每个分类的描述")
 
@@ -74,6 +78,13 @@ class UserInfoResponse(BaseModel):
     username: str
     email: Optional[str]
     created_at: str
+    preferences: Optional[dict] = None
+
+
+class CheckUsernameResponse(BaseModel):
+    """检查用户名响应"""
+    exists: bool = Field(..., description="用户名是否已存在")
+    message: str = Field(..., description="响应消息")
 
 
 # ==================== 依赖注入 ====================
@@ -291,6 +302,41 @@ async def logout(
     return {"message": "注销成功"}
 
 
+@router.get("/check-username", response_model=CheckUsernameResponse)
+async def check_username(
+    username: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    检查用户名是否已存在
+    
+    参数：
+        username: 用户名
+        db: 数据库会话
+    
+    返回：
+        用户名是否存在
+    """
+    from sqlalchemy import select
+    from app.models import User
+    
+    result = await db.execute(
+        select(User).where(User.username == username)
+    )
+    existing_user = result.scalar_one_or_none()
+    
+    if existing_user:
+        return {
+            "exists": True,
+            "message": "用户名已被注册"
+        }
+    
+    return {
+        "exists": False,
+        "message": "用户名可用"
+    }
+
+
 @router.get("/categories/primary", response_model=GetPrimaryCategoriesResponse)
 async def get_primary_categories():
     """
@@ -298,6 +344,8 @@ async def get_primary_categories():
     """
     category_service = CategoryService()
     return {
+        "code": 200,
+        "message": "获取一级分类成功",
         "categories": category_service.get_primary_categories()
     }
 
@@ -325,6 +373,8 @@ async def generate_subcategories(
     try:
         result = await category_service.generate_subcategories(request.primary_categories)
         return {
+            "code": 200,
+            "message": "生成二级分类成功",
             "categories": result.categories,
             "descriptions": result.descriptions
         }
@@ -346,5 +396,6 @@ async def get_current_user_info(
         "user_id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
-        "created_at": current_user.created_at.isoformat() if current_user.created_at else None
+        "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
+        "preferences": current_user.preferences
     }

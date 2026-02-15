@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     
     # CORS
     CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:5173", "http://localhost:3000"],
+        default=["*"],  # 允许所有来源
         json_schema_extra={"env": None}  # 禁止从环境变量读取
     )
     
