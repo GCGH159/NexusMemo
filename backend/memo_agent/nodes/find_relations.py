@@ -13,6 +13,7 @@ from langgraph.graph.message import add_messages
 from memo_agent.state import MemoProcessState
 from memo_agent.schemas import EventAnalysis
 from app.db.config import neo4j_conn, settings
+from app.services.future_event_storage import FutureEventStorage
 
 
 # ============================================================
@@ -28,6 +29,7 @@ async def find_relations_quicknote(state: MemoProcessState) -> dict:
     2. 基于实体查找相关速记
     3. 基于分类查找相关速记
     4. 基于时间范围查找最近速记
+    5. 查询用户的将来事项（通过Redis）
     """
     user_id = state["user_id"]
     memo_id = state["memo_id"]
@@ -38,6 +40,39 @@ async def find_relations_quicknote(state: MemoProcessState) -> dict:
     classification = state["classification_result"] or {}
     
     candidates = []
+    
+    # 5. 查询用户的将来事项
+    future_events = await FutureEventStorage.get_future_events(user_id)
+    for event in future_events:
+        # 排除当前memo
+        if event.get("memo_id") == memo_id:
+            continue
+        
+        # 检查标签匹配
+        event_tags = event.get("tags", [])
+        matched_tags = set(tags) & set(event_tags)
+        
+        # 检查实体匹配
+        event_entities = event.get("entities", [])
+        matched_entities = set(entities) & set(event_entities)
+        
+        # 如果有匹配，添加到候选列表
+        if matched_tags or matched_entities:
+            match_reasons = []
+            if matched_tags:
+                match_reasons.append(f"标签匹配: {', '.join(matched_tags)}")
+            if matched_entities:
+                match_reasons.append(f"实体匹配: {', '.join(matched_entities)}")
+            
+            candidates.append({
+                "id": event["memo_id"],
+                "title": event["title"],
+                "content_preview": event.get("content", "")[:200],
+                "type": "future_event",
+                "match_reason": "; ".join(match_reasons),
+                "reminder_time": event.get("reminder_time"),
+                "reminder_type": event.get("reminder_type")
+            })
     
     session = await neo4j_conn.get_session()
     try:

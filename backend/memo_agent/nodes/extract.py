@@ -47,12 +47,13 @@ async def extract_tags_entities_node(state: MemoProcessState) -> dict:
     
     # 构建提示词
     prompt = ChatPromptTemplate.from_messages([
-        ("system", """你是一个智能内容提取专家。你的任务是从速记内容中提取标签和实体。
+        ("system", """你是一个智能内容提取专家。你的任务是从速记内容中提取标签、实体和时间信息。
 
 提取原则：
 1. 标签：提取内容的核心主题和关键词，优先使用用户已有的标签
 2. 实体：识别内容中提到的人名、组织名、技术名、概念、地点等
-3. 摘要：生成简洁的内容摘要（不超过100字）
+3. 时间信息：识别内容中的时间表达，判断是过去、现在还是将来
+4. 摘要：生成简洁的内容摘要（不超过100字）
 
 实体类型说明：
 - person: 人名
@@ -60,6 +61,21 @@ async def extract_tags_entities_node(state: MemoProcessState) -> dict:
 - technology: 技术栈/工具名
 - concept: 概念/术语
 - location: 地点
+
+时间类型说明：
+- past: 过去的时间
+- present: 现在
+- future: 将来的时间
+
+提醒类型说明：
+- deadline: 截止日期
+- appointment: 约会/会议
+- task: 任务/待办事项
+
+**重要：datetime_str字段必须填写！**
+- 如果是相对时间（如"明天"、"后天"、"下周三"、"下周五"），直接使用该词
+- 如果是具体时间（如"2026-02-20"、"下周三下午2点"），提取可解析的部分（如"下周三"）
+- 如果没有时间信息，time_type设为"present"，datetime_str设为"今天"
 
 请严格按照以下 JSON 格式输出：
 {format_instructions}"""),
@@ -70,7 +86,7 @@ async def extract_tags_entities_node(state: MemoProcessState) -> dict:
 用户常用的标签：
 {tags}
 
-请提取标签和实体，并生成摘要。""")
+请提取标签、实体和时间信息，并生成摘要。""")
     ]).partial(format_instructions=parser.get_format_instructions())
     
     # 执行提取

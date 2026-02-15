@@ -62,6 +62,7 @@ backend/
 │   │   ├── classify.py           # 分类节点
 │   │   ├── extract.py            # 提取标签和实体节点
 │   │   ├── find_relations.py     # 查找关系节点
+│   │   ├── future_reminder.py    # 将来事项提醒节点
 │   │   ├── judge_relations.py    # 判定关系节点
 │   │   ├── load_context.py       # 加载用户图谱上下文节点
 │   │   └── persist_graph.py      # 持久化到 Neo4j 节点
@@ -239,12 +240,20 @@ Agent 工作流编排，定义处理流程：
 分类节点，使用 LLM 将速记分类到用户偏好的一级/二级分类。
 
 ##### `memo_agent/nodes/extract.py`
-提取节点，使用 LLM 从速记内容中提取标签和实体。
+提取节点，使用 LLM 从速记内容中提取标签、实体和时间信息。
 
 ##### `memo_agent/nodes/find_relations.py`
 查找关系节点：
-- 速记：被动匹配相关内容
+- 速记：被动匹配相关内容，包括查询用户的将来事项
 - 事件：使用 ReAct Agent 主动搜索相关内容
+
+##### `memo_agent/nodes/future_reminder.py`
+将来事项提醒节点：
+- 识别将来要做的事情（基于时间信息提取）
+- 通过延迟队列设置定时提醒
+- 通过Redis广播通知关系发现Agent
+- 支持多种时间格式（ISO、相对时间、自然语言）
+- 支持多种提醒类型（deadline、appointment、task）
 
 ##### `memo_agent/nodes/judge_relations.py`
 判定关系节点，使用 LLM 判定候选关系的相关性。

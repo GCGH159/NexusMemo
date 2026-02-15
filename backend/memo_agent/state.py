@@ -19,7 +19,8 @@ class MemoProcessState(TypedDict):
     - content: 内容
     - user_graph_context: 用户图谱上下文（分类、标签、活跃事件等）
     - classification_result: 分类结果
-    - extraction_result: 提取结果（标签、实体）
+    - extraction_result: 提取结果（标签、实体、时间信息）
+    - reminder_result: 提醒结果
     - relation_candidates: 关联候选列表
     - final_relations: 最终关联关系
     - event_links: 事件绑定关系
@@ -33,6 +34,7 @@ class MemoProcessState(TypedDict):
     user_graph_context: dict
     classification_result: dict
     extraction_result: dict
+    reminder_result: dict
     relation_candidates: list[dict]
     final_relations: list[dict]
     event_links: list[dict]

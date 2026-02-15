@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from app.db.config import settings, neo4j_conn, redis_conn
 from app.api.v1 import memos, auth, preferences, search
+from app.services.reminder import reminder_service
 
 
 @asynccontextmanager

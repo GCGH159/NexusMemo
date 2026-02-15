@@ -26,10 +26,20 @@ class Entity(BaseModel):
     confidence: float = Field(description="置信度", ge=0, le=1)
 
 
+class TimeInfo(BaseModel):
+    """时间信息"""
+    time_str: str = Field(description="原始时间字符串")
+    time_type: str = Field(description="时间类型（past/present/future）")
+    datetime_str: Optional[str] = Field(default=None, description="标准化的日期时间字符串")
+    is_reminder: bool = Field(default=False, description="是否需要提醒")
+    reminder_type: Optional[str] = Field(default=None, description="提醒类型（deadline/appointment/task）")
+
+
 class ExtractionResult(BaseModel):
     """提取结果"""
     tags: List[Tag] = Field(description="标签列表")
     entities: List[Entity] = Field(description="实体列表")
+    time_info: Optional[TimeInfo] = Field(default=None, description="时间信息")
     summary: Optional[str] = Field(default=None, description="内容摘要")
 
 

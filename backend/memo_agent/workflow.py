@@ -7,6 +7,7 @@ from langgraph.graph import StateGraph, END
 from memo_agent.nodes.load_context import load_user_graph_context
 from memo_agent.nodes.classify import classify_node
 from memo_agent.nodes.extract import extract_tags_entities_node
+from memo_agent.nodes.future_reminder import future_reminder_node
 from memo_agent.nodes.find_relations import find_relations_node
 from memo_agent.nodes.judge_relations import judge_relations_node
 from memo_agent.nodes.bind_events import bind_events_node
@@ -33,6 +34,7 @@ def create_memo_processing_graph():
     workflow.add_node("load_context", load_user_graph_context)
     workflow.add_node("classify", classify_node)
     workflow.add_node("extract", extract_tags_entities_node)
+    workflow.add_node("future_reminder", future_reminder_node)
     workflow.add_node("find_relations", find_relations_node)
     workflow.add_node("judge_relations", judge_relations_node)
     workflow.add_node("bind_events", bind_events_node)
@@ -44,9 +46,10 @@ def create_memo_processing_graph():
     # 标准路径：
     workflow.add_edge("load_context", "classify")
     workflow.add_edge("classify", "extract")
+    workflow.add_edge("extract", "future_reminder")
     
-    # 从 extract 开始分流
-    workflow.add_edge("extract", "find_relations")
+    # 从 future_reminder 开始分流
+    workflow.add_edge("future_reminder", "find_relations")
     
     # find_relations 后分流
     # 对于速记：需要 judge_relations 和 bind_events
@@ -125,6 +128,7 @@ async def process_new_memo(user_id: int, memo_type: str, title: str, content: st
         user_graph_context={},
         classification_result={},
         extraction_result={},
+        reminder_result={},
         relation_candidates=[],
         final_relations=[],
         event_links=[],
